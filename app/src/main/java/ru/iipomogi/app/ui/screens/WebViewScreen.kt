@@ -3,6 +3,7 @@ package ru.iipomogi.app.ui.screens
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
+import android.util.Log
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
@@ -33,11 +34,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import ru.iipomogi.app.BuildConfig
 import ru.iipomogi.app.navigation.AppDestinations
 import ru.iipomogi.app.ui.components.ErrorState
 import ru.iipomogi.app.ui.components.LoadingState
 import ru.iipomogi.app.ui.theme.AppColors
 import ru.iipomogi.app.ui.theme.AppTypography
+
+private const val WEB_LOG_TAG = "IIPomogiWebView"
 
 private enum class WebLoadState {
     Loading,
@@ -86,14 +90,20 @@ fun WebViewScreen(
                             )
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            settings.cacheMode = WebSettings.LOAD_DEFAULT
-                            settings.mixedContentMode =
-                                WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                             settings.useWideViewPort = true
                             settings.loadWithOverviewMode = true
                             settings.setSupportZoom(true)
                             settings.builtInZoomControls = true
                             settings.displayZoomControls = false
+
+                            // В debug сбрасываем кэш, чтобы не показывать старую 404.
+                            if (BuildConfig.DEBUG) {
+                                settings.cacheMode = WebSettings.LOAD_NO_CACHE
+                                clearCache(true)
+                                clearHistory()
+                            } else {
+                                settings.cacheMode = WebSettings.LOAD_DEFAULT
+                            }
 
                             CookieManager.getInstance().setAcceptCookie(true)
                             CookieManager.getInstance()
@@ -106,10 +116,12 @@ fun WebViewScreen(
                                     pageUrl: String?,
                                     favicon: Bitmap?
                                 ) {
+                                    Log.d(WEB_LOG_TAG, "Page started: $pageUrl")
                                     loadState = WebLoadState.Loading
                                 }
 
                                 override fun onPageFinished(view: WebView?, pageUrl: String?) {
+                                    Log.d(WEB_LOG_TAG, "Page finished: $pageUrl")
                                     if (loadState != WebLoadState.Error) {
                                         loadState = WebLoadState.Ready
                                     }
@@ -121,6 +133,10 @@ fun WebViewScreen(
                                     error: WebResourceError?
                                 ) {
                                     if (request?.isForMainFrame == true) {
+                                        Log.d(
+                                            WEB_LOG_TAG,
+                                            "Page error: ${request.url} code=${error?.errorCode}"
+                                        )
                                         loadState = WebLoadState.Error
                                     }
                                 }
@@ -132,10 +148,15 @@ fun WebViewScreen(
                                     val uri = request?.url ?: return false
                                     val host = uri.host?.lowercase().orEmpty()
                                     val isInternal = AppDestinations.SITE_HOSTS.any {
-                                        host == it.lowercase() || host.endsWith(".${it.lowercase()}")
+                                        host == it.lowercase() ||
+                                            host.endsWith(".${it.lowercase()}")
                                     }
-                                    if (isInternal || host.isEmpty()) return false
+                                    if (isInternal || host.isEmpty()) {
+                                        Log.d(WEB_LOG_TAG, "Internal navigation: $uri")
+                                        return false
+                                    }
                                     return try {
+                                        Log.d(WEB_LOG_TAG, "External browser: $uri")
                                         view?.context?.startActivity(
                                             Intent(Intent.ACTION_VIEW, uri)
                                         )
@@ -147,7 +168,9 @@ fun WebViewScreen(
                             }
 
                             webViewRef = this
-                            loadUrl(url)
+                            val targetUrl = url.trim()
+                            Log.d(WEB_LOG_TAG, "Opening URL: $targetUrl")
+                            loadUrl(targetUrl)
                         }
                     },
                     update = { webView ->

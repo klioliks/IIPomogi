@@ -1,6 +1,7 @@
 package ru.iipomogi.app
 
 import android.os.Bundle
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -47,6 +48,7 @@ private fun IiPomogiApp() {
         is AppScreen.Home -> {
             HomeScreen(
                 onOpenSection = { url, title ->
+                    Log.d("IIPomogiWebView", "Home card open: $title -> $url")
                     webUrl = url
                     webTitle = title
                     screen = "web"

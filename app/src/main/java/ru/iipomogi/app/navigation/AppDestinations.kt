@@ -3,12 +3,14 @@ package ru.iipomogi.app.navigation
 /**
  * Все URL разделов сайта в одном месте.
  * При необходимости замени маршруты здесь — больше нигде менять не нужно.
+ *
+ * Важно: для WebView используем только punycode-домен, не кириллический.
  */
 object AppDestinations {
     /** Punycode-версия домена ии-помоги.рф — стабильнее для Android WebView. */
     const val BASE_URL = "https://xn----ftbnacwnbg.xn--p1ai"
 
-    const val HOME_URL = BASE_URL
+    const val HOME_URL = "$BASE_URL/"
 
     /** ИИ-навигатор — отдельная страница бота. */
     const val NAVIGATOR_URL = "$BASE_URL/ai-navigator"
@@ -25,7 +27,6 @@ object AppDestinations {
     /** Хосты сайта (для проверки внутренних ссылок). */
     val SITE_HOSTS = setOf(
         "xn----ftbnacwnbg.xn--p1ai",
-        "ии-помоги.рф",
         "www.xn----ftbnacwnbg.xn--p1ai"
     )
 }

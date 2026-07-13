@@ -95,7 +95,8 @@ fun WebViewScreen(
         WebTopBar(
             title = title,
             debugUrl = if (BuildConfig.DEBUG) shownUrl else null,
-            onBack = { handleBack() }
+            onBack = { handleBack() },
+            onGoHome = onNavigateHome
         )
 
         Box(modifier = Modifier.fillMaxSize()) {
@@ -304,7 +305,8 @@ fun WebViewScreen(
 private fun WebTopBar(
     title: String,
     debugUrl: String?,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onGoHome: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -316,7 +318,7 @@ private fun WebTopBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
-                .padding(horizontal = 12.dp)
+                .padding(horizontal = 8.dp)
         ) {
             Text(
                 text = "←",
@@ -329,7 +331,19 @@ private fun WebTopBar(
             Text(
                 text = title,
                 style = AppTypography.Title,
-                modifier = Modifier.align(Alignment.Center)
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .padding(horizontal = 72.dp)
+            )
+            Text(
+                text = "На главную",
+                style = AppTypography.Label.copy(color = AppColors.AccentLavender),
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .clickable(onClick = onGoHome)
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
             )
         }
         if (debugUrl != null) {

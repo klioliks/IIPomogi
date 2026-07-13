@@ -10,8 +10,8 @@ object AppDestinations {
 
     const val HOME_URL = BASE_URL
 
-    /** ИИ-навигатор — на главной странице сайта. */
-    const val NAVIGATOR_URL = BASE_URL
+    /** ИИ-навигатор — отдельная страница бота. */
+    const val NAVIGATOR_URL = "$BASE_URL/ai-navigator"
 
     /** Раздел «Выдохни». */
     const val PAUSE_URL = "$BASE_URL/pause"

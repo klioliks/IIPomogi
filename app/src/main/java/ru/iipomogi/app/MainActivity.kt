@@ -1,5 +1,7 @@
 package ru.iipomogi.app
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -12,6 +14,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import ru.iipomogi.app.navigation.AppDestinations
 import ru.iipomogi.app.ui.screens.HomeScreen
 import ru.iipomogi.app.ui.screens.WebViewScreen
 import ru.iipomogi.app.ui.theme.AppTheme
@@ -38,6 +42,7 @@ private fun IiPomogiApp() {
     var screen by rememberSaveable { mutableStateOf("home") }
     var webUrl by rememberSaveable { mutableStateOf("") }
     var webTitle by rememberSaveable { mutableStateOf("") }
+    val context = LocalContext.current
 
     val current: AppScreen = when (screen) {
         "web" -> AppScreen.Web(webUrl, webTitle)
@@ -52,6 +57,10 @@ private fun IiPomogiApp() {
                     webUrl = url
                     webTitle = title
                     screen = "web"
+                },
+                onOpenSiteInBrowser = {
+                    val siteUri = Uri.parse(AppDestinations.BROWSER_SITE_URL)
+                    context.startActivity(Intent(Intent.ACTION_VIEW, siteUri))
                 },
                 modifier = Modifier.fillMaxSize()
             )

@@ -4,11 +4,13 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.util.Log
+import android.view.View
 import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -20,6 +22,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.Text
@@ -32,7 +35,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import ru.iipomogi.app.BuildConfig
 import ru.iipomogi.app.navigation.AppDestinations
@@ -57,9 +62,14 @@ fun WebViewScreen(
     onNavigateHome: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var loadState by remember { mutableStateOf(WebLoadState.Loading) }
+    val targetUrl = remember(url) { url.trim() }
+    val openedAsSiteHome = remember(targetUrl) {
+        AppDestinations.isSiteHomeUrl(targetUrl)
+    }
+    var loadState by remember(targetUrl) { mutableStateOf(WebLoadState.Loading) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
-    var reloadKey by remember { mutableIntStateOf(0) }
+    var reloadKey by remember(targetUrl) { mutableIntStateOf(0) }
+    var shownUrl by remember(targetUrl) { mutableStateOf(targetUrl) }
 
     fun handleBack() {
         val webView = webViewRef
@@ -70,16 +80,26 @@ fun WebViewScreen(
         }
     }
 
+    fun leaveToAppHome(reason: String, fromUrl: String?) {
+        Log.d(WEB_LOG_TAG, "Back to app home ($reason): $fromUrl")
+        onNavigateHome()
+    }
+
     BackHandler { handleBack() }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .imePadding()
+    ) {
         WebTopBar(
             title = title,
+            debugUrl = if (BuildConfig.DEBUG) shownUrl else null,
             onBack = { handleBack() }
         )
 
         Box(modifier = Modifier.fillMaxSize()) {
-            key(reloadKey) {
+            key(targetUrl, reloadKey) {
                 AndroidView(
                     modifier = Modifier.fillMaxSize(),
                     factory = { context ->
@@ -88,27 +108,46 @@ fun WebViewScreen(
                                 ViewGroup.LayoutParams.MATCH_PARENT,
                                 ViewGroup.LayoutParams.MATCH_PARENT
                             )
+
+                            // Чтобы поля логина/пароля принимали фокус и клавиатуру.
+                            isFocusable = true
+                            isFocusableInTouchMode = true
+                            descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS
+                            importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
+                            // Подгоняем страницу под ширину телефона, без «широкого» режима.
                             settings.useWideViewPort = true
-                            settings.loadWithOverviewMode = true
-                            settings.setSupportZoom(true)
-                            settings.builtInZoomControls = true
+                            settings.loadWithOverviewMode = false
+                            settings.layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
+                            settings.setSupportZoom(false)
+                            settings.builtInZoomControls = false
                             settings.displayZoomControls = false
+                            settings.cacheMode = WebSettings.LOAD_DEFAULT
+                            settings.userAgentString =
+                                "Mozilla/5.0 (Linux; Android 14; Pixel 7) " +
+                                    "AppleWebKit/537.36 (KHTML, like Gecko) " +
+                                    "Chrome/120.0.0.0 Mobile Safari/537.36"
 
-                            // В debug сбрасываем кэш, чтобы не показывать старую 404.
-                            if (BuildConfig.DEBUG) {
-                                settings.cacheMode = WebSettings.LOAD_NO_CACHE
-                                clearCache(true)
-                                clearHistory()
-                            } else {
-                                settings.cacheMode = WebSettings.LOAD_DEFAULT
-                            }
+                            isHorizontalScrollBarEnabled = false
+                            overScrollMode = View.OVER_SCROLL_NEVER
+                            setInitialScale(100)
 
                             CookieManager.getInstance().setAcceptCookie(true)
                             CookieManager.getInstance()
                                 .setAcceptThirdPartyCookies(this, true)
 
+                            // Не чистим cookies/storage при каждом открытии —
+                            // иначе вход в кабинет сбрасывается и формы ведут себя странно.
+                            if (BuildConfig.DEBUG) {
+                                WebView.setWebContentsDebuggingEnabled(true)
+                            }
+
+                            setOnTouchListener { v, _ ->
+                                v.requestFocusFromTouch()
+                                false
+                            }
                             webChromeClient = WebChromeClient()
                             webViewClient = object : WebViewClient() {
                                 override fun onPageStarted(
@@ -117,13 +156,61 @@ fun WebViewScreen(
                                     favicon: Bitmap?
                                 ) {
                                     Log.d(WEB_LOG_TAG, "Page started: $pageUrl")
+                                    if (pageUrl != null) shownUrl = pageUrl
+                                    // Если открыли раздел (/test и т.п.), а сайт увёл на главную —
+                                    // возвращаем в приложение.
+                                    if (!openedAsSiteHome &&
+                                        AppDestinations.isSiteHomeUrl(pageUrl)
+                                    ) {
+                                        leaveToAppHome("page-started-home", pageUrl)
+                                        return
+                                    }
                                     loadState = WebLoadState.Loading
                                 }
 
                                 override fun onPageFinished(view: WebView?, pageUrl: String?) {
                                     Log.d(WEB_LOG_TAG, "Page finished: $pageUrl")
+                                    Log.d(WEB_LOG_TAG, "WebView.getUrl(): ${view?.url}")
+                                    Log.d(WEB_LOG_TAG, "WebView.title: ${view?.title}")
+                                    if (pageUrl != null) shownUrl = pageUrl
+                                    if (!openedAsSiteHome &&
+                                        AppDestinations.isSiteHomeUrl(pageUrl)
+                                    ) {
+                                        leaveToAppHome("page-finished-home", pageUrl)
+                                        return
+                                    }
+                                    applyMobilePageFit(view)
                                     if (loadState != WebLoadState.Error) {
                                         loadState = WebLoadState.Ready
+                                    }
+                                }
+
+                                override fun doUpdateVisitedHistory(
+                                    view: WebView?,
+                                    pageUrl: String?,
+                                    isReload: Boolean
+                                ) {
+                                    // SPA (TanStack) часто меняет URL через history API.
+                                    if (!openedAsSiteHome &&
+                                        AppDestinations.isSiteHomeUrl(pageUrl)
+                                    ) {
+                                        leaveToAppHome("history-home", pageUrl)
+                                        return
+                                    }
+                                    if (pageUrl != null) shownUrl = pageUrl
+                                    applyMobilePageFit(view)
+                                }
+
+                                override fun onReceivedHttpError(
+                                    view: WebView?,
+                                    request: WebResourceRequest?,
+                                    errorResponse: WebResourceResponse?
+                                ) {
+                                    if (request?.isForMainFrame == true) {
+                                        Log.d(
+                                            WEB_LOG_TAG,
+                                            "HTTP error ${errorResponse?.statusCode} for ${request.url}"
+                                        )
                                     }
                                 }
 
@@ -146,11 +233,22 @@ fun WebViewScreen(
                                     request: WebResourceRequest?
                                 ): Boolean {
                                     val uri = request?.url ?: return false
+                                    val urlString = uri.toString()
                                     val host = uri.host?.lowercase().orEmpty()
                                     val isInternal = AppDestinations.SITE_HOSTS.any {
                                         host == it.lowercase() ||
                                             host.endsWith(".${it.lowercase()}")
                                     }
+
+                                    // «Вернуться на главную» на сайте → главная приложения.
+                                    if (isInternal &&
+                                        !openedAsSiteHome &&
+                                        AppDestinations.isSiteHomeUrl(urlString)
+                                    ) {
+                                        leaveToAppHome("link-home", urlString)
+                                        return true
+                                    }
+
                                     if (isInternal || host.isEmpty()) {
                                         Log.d(WEB_LOG_TAG, "Internal navigation: $uri")
                                         return false
@@ -168,9 +266,14 @@ fun WebViewScreen(
                             }
 
                             webViewRef = this
-                            val targetUrl = url.trim()
                             Log.d(WEB_LOG_TAG, "Opening URL: $targetUrl")
-                            loadUrl(targetUrl)
+                            loadUrl(
+                                targetUrl,
+                                mapOf(
+                                    "Cache-Control" to "no-cache",
+                                    "Pragma" to "no-cache"
+                                )
+                            )
                         }
                     },
                     update = { webView ->
@@ -202,28 +305,103 @@ fun WebViewScreen(
 @Composable
 private fun WebTopBar(
     title: String,
+    debugUrl: String?,
     onBack: () -> Unit
 ) {
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(AppColors.CosmicDeep)
             .statusBarsPadding()
-            .height(56.dp)
-            .padding(horizontal = 12.dp)
     ) {
-        Text(
-            text = "←",
-            style = AppTypography.Headline,
+        Box(
             modifier = Modifier
-                .align(Alignment.CenterStart)
-                .clickable(onClick = onBack)
-                .padding(8.dp)
-        )
-        Text(
-            text = title,
-            style = AppTypography.Title,
-            modifier = Modifier.align(Alignment.Center)
-        )
+                .fillMaxWidth()
+                .height(56.dp)
+                .padding(horizontal = 12.dp)
+        ) {
+            Text(
+                text = "←",
+                style = AppTypography.Headline,
+                modifier = Modifier
+                    .align(Alignment.CenterStart)
+                    .clickable(onClick = onBack)
+                    .padding(8.dp)
+            )
+            Text(
+                text = title,
+                style = AppTypography.Title,
+                modifier = Modifier.align(Alignment.Center)
+            )
+        }
+        if (debugUrl != null) {
+            Text(
+                text = debugUrl,
+                color = AppColors.AccentCyan,
+                fontSize = 10.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 4.dp)
+            )
+        }
     }
+}
+
+/**
+ * Подгоняет страницу сайта под ширину телефона:
+ * мобильный viewport + запрет горизонтального скролла.
+ */
+@SuppressLint("SetJavaScriptEnabled")
+private fun applyMobilePageFit(webView: WebView?) {
+    if (webView == null) return
+    val js = """
+        (function() {
+          try {
+            var content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+            var meta = document.querySelector('meta[name="viewport"]');
+            if (!meta) {
+              meta = document.createElement('meta');
+              meta.setAttribute('name', 'viewport');
+              (document.head || document.documentElement).appendChild(meta);
+            }
+            meta.setAttribute('content', content);
+
+            var styleId = 'iipomogi-mobile-fit';
+            var style = document.getElementById(styleId);
+            if (!style) {
+              style = document.createElement('style');
+              style.id = styleId;
+              (document.head || document.documentElement).appendChild(style);
+            }
+            style.textContent = `
+              html, body {
+                width: 100% !important;
+                max-width: 100% !important;
+                min-width: 0 !important;
+                overflow-x: hidden !important;
+                overscroll-behavior-x: none !important;
+              }
+              body, #root, #app, main, .page-flow {
+                max-width: 100vw !important;
+                min-width: 0 !important;
+                overflow-x: hidden !important;
+              }
+              img, video, canvas, svg, iframe, table {
+                max-width: 100% !important;
+                height: auto !important;
+              }
+            `;
+
+            document.documentElement.style.overflowX = 'hidden';
+            if (document.body) {
+              document.body.style.overflowX = 'hidden';
+              document.body.style.maxWidth = '100%';
+              document.body.style.minWidth = '0';
+            }
+          } catch (e) {}
+        })();
+    """.trimIndent()
+    webView.evaluateJavascript(js, null)
 }

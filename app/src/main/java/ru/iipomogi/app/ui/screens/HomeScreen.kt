@@ -25,6 +25,7 @@ import ru.iipomogi.app.R
 import ru.iipomogi.app.navigation.AppDestinations
 import ru.iipomogi.app.ui.components.AppCard
 import ru.iipomogi.app.ui.components.CosmicBackground
+import ru.iipomogi.app.ui.components.SecondaryButton
 import ru.iipomogi.app.ui.components.SoftBadge
 import ru.iipomogi.app.ui.theme.AppColors
 import ru.iipomogi.app.ui.theme.AppTypography
@@ -60,18 +61,13 @@ private val homeSections = listOf(
         title = "Личный кабинет",
         description = "Прогресс, заметки и дорожная карта",
         url = AppDestinations.ACCOUNT_URL
-    ),
-    HomeSection(
-        emoji = "🌐",
-        title = "Сайт целиком",
-        description = "Открыть полную версию сайта",
-        url = AppDestinations.HOME_URL
     )
 )
 
 @Composable
 fun HomeScreen(
     onOpenSection: (url: String, title: String) -> Unit,
+    onOpenSiteInBrowser: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     CosmicBackground(modifier = modifier) {
@@ -158,6 +154,13 @@ fun HomeScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+
+            SecondaryButton(
+                text = "Перейти на сайт ↗",
+                onClick = onOpenSiteInBrowser
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
 
             Text(
                 text = "Выдохни. Один шаг за раз.",

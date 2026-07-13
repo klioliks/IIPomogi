@@ -117,7 +117,6 @@ fun WebViewScreen(
 
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
-                            // Подгоняем страницу под ширину телефона, без «широкого» режима.
                             settings.useWideViewPort = true
                             settings.loadWithOverviewMode = false
                             settings.layoutAlgorithm = WebSettings.LayoutAlgorithm.NORMAL
@@ -130,8 +129,10 @@ fun WebViewScreen(
                                     "AppleWebKit/537.36 (KHTML, like Gecko) " +
                                     "Chrome/120.0.0.0 Mobile Safari/537.36"
 
+                            // Вертикальный скролл нужен; горизонтальный — нет.
+                            isVerticalScrollBarEnabled = true
                             isHorizontalScrollBarEnabled = false
-                            overScrollMode = View.OVER_SCROLL_NEVER
+                            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
                             setInitialScale(100)
 
                             CookieManager.getInstance().setAcceptCookie(true)
@@ -144,10 +145,6 @@ fun WebViewScreen(
                                 WebView.setWebContentsDebuggingEnabled(true)
                             }
 
-                            setOnTouchListener { v, _ ->
-                                v.requestFocusFromTouch()
-                                false
-                            }
                             webChromeClient = WebChromeClient()
                             webViewClient = object : WebViewClient() {
                                 override fun onPageStarted(
@@ -179,7 +176,8 @@ fun WebViewScreen(
                                         leaveToAppHome("page-finished-home", pageUrl)
                                         return
                                     }
-                                    applyMobilePageFit(view)
+                                    // Убираем старые инъекции, которые могли ломать скролл вниз.
+                                    restorePageScrolling(view)
                                     if (loadState != WebLoadState.Error) {
                                         loadState = WebLoadState.Ready
                                     }
@@ -198,7 +196,7 @@ fun WebViewScreen(
                                         return
                                     }
                                     if (pageUrl != null) shownUrl = pageUrl
-                                    applyMobilePageFit(view)
+                                    restorePageScrolling(view)
                                 }
 
                                 override fun onReceivedHttpError(
@@ -350,55 +348,28 @@ private fun WebTopBar(
 }
 
 /**
- * Подгоняет страницу сайта под ширину телефона:
- * мобильный viewport + запрет горизонтального скролла.
+ * Убирает старые CSS-инъекции приложения, которые ломали вертикальный скролл.
+ * Дальше оставляем вёрстку сайта как есть.
  */
-@SuppressLint("SetJavaScriptEnabled")
-private fun applyMobilePageFit(webView: WebView?) {
+private fun restorePageScrolling(webView: WebView?) {
     if (webView == null) return
     val js = """
         (function() {
           try {
-            var content = 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
-            var meta = document.querySelector('meta[name="viewport"]');
-            if (!meta) {
-              meta = document.createElement('meta');
-              meta.setAttribute('name', 'viewport');
-              (document.head || document.documentElement).appendChild(meta);
-            }
-            meta.setAttribute('content', content);
-
-            var styleId = 'iipomogi-mobile-fit';
-            var style = document.getElementById(styleId);
-            if (!style) {
-              style = document.createElement('style');
-              style.id = styleId;
-              (document.head || document.documentElement).appendChild(style);
-            }
-            style.textContent = `
-              html, body {
-                width: 100% !important;
-                max-width: 100% !important;
-                min-width: 0 !important;
-                overflow-x: hidden !important;
-                overscroll-behavior-x: none !important;
-              }
-              body, #root, #app, main, .page-flow {
-                max-width: 100vw !important;
-                min-width: 0 !important;
-                overflow-x: hidden !important;
-              }
-              img, video, canvas, svg, iframe, table {
-                max-width: 100% !important;
-                height: auto !important;
-              }
-            `;
-
-            document.documentElement.style.overflowX = 'hidden';
+            ['iipomogi-mobile-fit', 'iipomogi-scroll-fix'].forEach(function(id) {
+              var el = document.getElementById(id);
+              if (el && el.parentNode) el.parentNode.removeChild(el);
+            });
+            document.documentElement.style.removeProperty('overflow-x');
+            document.documentElement.style.removeProperty('overflow-y');
+            document.documentElement.style.removeProperty('height');
             if (document.body) {
-              document.body.style.overflowX = 'hidden';
-              document.body.style.maxWidth = '100%';
-              document.body.style.minWidth = '0';
+              document.body.style.removeProperty('overflow-x');
+              document.body.style.removeProperty('overflow-y');
+              document.body.style.removeProperty('height');
+              document.body.style.removeProperty('min-height');
+              document.body.style.removeProperty('max-width');
+              document.body.style.removeProperty('min-width');
             }
           } catch (e) {}
         })();

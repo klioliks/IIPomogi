@@ -37,7 +37,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import ru.iipomogi.app.BuildConfig
 import ru.iipomogi.app.navigation.AppDestinations
@@ -69,7 +68,6 @@ fun WebViewScreen(
     var loadState by remember(targetUrl) { mutableStateOf(WebLoadState.Loading) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     var reloadKey by remember(targetUrl) { mutableIntStateOf(0) }
-    var shownUrl by remember(targetUrl) { mutableStateOf(targetUrl) }
 
     fun handleBack() {
         val webView = webViewRef
@@ -94,7 +92,6 @@ fun WebViewScreen(
     ) {
         WebTopBar(
             title = title,
-            debugUrl = if (BuildConfig.DEBUG) shownUrl else null,
             onBack = { handleBack() },
             onGoHome = onNavigateHome
         )
@@ -154,7 +151,6 @@ fun WebViewScreen(
                                     favicon: Bitmap?
                                 ) {
                                     Log.d(WEB_LOG_TAG, "Page started: $pageUrl")
-                                    if (pageUrl != null) shownUrl = pageUrl
                                     // Если открыли раздел (/test и т.п.), а сайт увёл на главную —
                                     // возвращаем в приложение.
                                     if (!openedAsSiteHome &&
@@ -170,7 +166,6 @@ fun WebViewScreen(
                                     Log.d(WEB_LOG_TAG, "Page finished: $pageUrl")
                                     Log.d(WEB_LOG_TAG, "WebView.getUrl(): ${view?.url}")
                                     Log.d(WEB_LOG_TAG, "WebView.title: ${view?.title}")
-                                    if (pageUrl != null) shownUrl = pageUrl
                                     if (!openedAsSiteHome &&
                                         AppDestinations.isSiteHomeUrl(pageUrl)
                                     ) {
@@ -196,7 +191,6 @@ fun WebViewScreen(
                                         leaveToAppHome("history-home", pageUrl)
                                         return
                                     }
-                                    if (pageUrl != null) shownUrl = pageUrl
                                     restorePageScrolling(view)
                                 }
 
@@ -304,7 +298,6 @@ fun WebViewScreen(
 @Composable
 private fun WebTopBar(
     title: String,
-    debugUrl: String?,
     onBack: () -> Unit,
     onGoHome: () -> Unit
 ) {
@@ -344,18 +337,6 @@ private fun WebTopBar(
                     .align(Alignment.CenterEnd)
                     .clickable(onClick = onGoHome)
                     .padding(horizontal = 8.dp, vertical = 8.dp)
-            )
-        }
-        if (debugUrl != null) {
-            Text(
-                text = debugUrl,
-                color = AppColors.AccentCyan,
-                fontSize = 10.sp,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 4.dp)
             )
         }
     }
